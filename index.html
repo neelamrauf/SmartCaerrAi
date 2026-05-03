@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ansari Intel | System Access</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Syncopate:wght@700&family=Space+Grotesk:wght@300;500;700&display=swap');
+        :root { --bg-color: #000; --text-color: #fff; }
+        body { background-color: #000; color: white; font-family: 'Space Grotesk', sans-serif; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+        .inp-field { background: #dce7f9; color: #000; padding: 15px; width: 100%; border-radius: 4px; font-weight: bold; border: none; outline: none; }
+        .btn-init { background: #fff; color: #000; padding: 15px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; border-radius: 4px; transition: 0.3s; width: 100%; }
+        .btn-init:hover { opacity: 0.8; }
+        .hide { display: none !important; }
+        #chatBox { flex-grow: 1; overflow-y: auto; padding: 40px; display: flex; flex-direction: column; gap: 15px; }
+        .ai-card { border-left: 4px solid #fff; background: #0a0a0a; padding: 20px; width: 100%; }
+    </style>
+</head>
+<body>
+
+    <header class="p-10 flex justify-between items-start">
+        <div class="brand-title text-3xl font-black uppercase tracking-tighter italic">ANSARI<span class="opacity-40">INTEL</span></div>
+        <div class="text-right uppercase text-[12px] font-bold border-r-4 pr-4 border-white">Engineer: Neelam Rauf</div>
+    </header>
+
+    <section id="dynamic-content" class="flex-grow flex flex-col">
+        
+        <!-- 1. AUTH VIEW (Login/Signup) -->
+        <main id="authView" class="flex-grow flex flex-col items-center justify-center p-6">
+            <h2 class="text-5xl font-black uppercase italic mb-10 tracking-tighter">System Access.</h2>
+            <div class="w-80 space-y-3">
+                <input id="username" placeholder="Username" class="inp-field">
+                <input id="password" type="password" placeholder="Password" class="inp-field">
+                <button onclick="handleAuth()" class="btn-init">Sign In</button>
+                <button onclick="handleAuth()" class="btn-init opacity-60">Sign Up</button>
+            </div>
+        </main>
+
+        <!-- 2. SYSTEM INTERFACE (Chat & Tools) -->
+        <main id="chatView" class="hide flex-grow flex flex-col overflow-hidden">
+            
+            <div id="chatBox"></div>
+
+            <!-- Upload & Tools -->
+            <div class="p-6 bg-white/5 border-t border-white/10">
+                <div class="max-w-4xl mx-auto">
+                    <div class="flex gap-2 mb-4 flex-wrap">
+                        <input type="file" id="fileUpload" class="hidden" accept=".pdf,image/*" onchange="handleFile(this)">
+                        <button onclick="document.getElementById('fileUpload').click()" class="btn-init w-auto px-4 py-2 text-[10px]">Upload CV/Image</button>
+                        <button onclick="openCamera()" class="btn-init w-auto px-4 py-2 text-[10px]">Camera</button>
+                        <button class="btn-init w-auto px-4 py-2 opacity-50 text-[10px]">Drive</button>
+                    </div>
+
+                    <div class="relative">
+                        <video id="camera" class="hidden w-64 rounded border border-white/20 mb-4 mx-auto"></video>
+                        <canvas id="canvas" class="hidden"></canvas>
+                        
+                        <div class="flex">
+                            <input id="msgInp" class="flex-1 p-4 bg-transparent border border-white/20 outline-none font-bold text-white" placeholder="Ask AI / System Command...">
+                            <button onclick="send()" class="btn-init w-24">Send</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </section>
+
+    <script>
+    const API_URL = "http://127.0.0.1:8000/api";
+    let user = "";
+
+    // AUTH Logic
+    function handleAuth() {
+        const u = document.getElementById('username').value;
+        const p = document.getElementById('password').value;
+        if(!u || !p) return alert("Credentials Required.");
+        user = u;
+        
+        // UI Switch
+        document.getElementById('authView').classList.add('hide');
+        document.getElementById('chatView').classList.remove('hide');
+        addLog(`SYSTEM_READY: User ${user} authorized. Welcome back.`, 'ai');
+    }
+
+    // CAMERA Logic
+    async function openCamera() {
+        const video = document.getElementById('camera');
+        video.classList.toggle('hide');
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            video.srcObject = stream;
+            video.play();
+            addLog("CAMERA_ACTIVE: Visual sensor initialized.", 'ai');
+        } catch (e) { alert("Camera access denied."); }
+    }
+
+    // FILE Logic
+    async function handleFile(input) {
+        if(!input.files[0]) return;
+        const file = input.files[0];
+        addLog(`UPLOADING: ${file.name}`, 'user');
+        
+        const fd = new FormData();
+        fd.append('username', user);
+        fd.append('document', file);
+
+        try {
+            const res = await fetch(`${API_URL}/assistant/process`, { method: 'POST', body: fd });
+            if (!res.ok) throw new Error();
+            const data = await res.json();
+            renderReport(data);
+        } catch (e) { addLog("UPLOAD_ERROR: Signal lost. Check backend.", 'ai'); }
+    }
+
+    // CHAT Logic
+    async function send() {
+        const inp = document.getElementById('msgInp');
+        const txt = inp.value.trim();
+        if(!txt) return;
+        
+        addLog(txt, 'user');
+        inp.value = "";
+
+        const fd = new FormData();
+        fd.append('username', user);
+        fd.append('message', txt);
+
+        try {
+            const res = await fetch(`${API_URL}/assistant/process`, { method: 'POST', body: fd });
+            if (!res.ok) throw new Error();
+            const data = await res.json();
+            renderReport(data);
+        } catch (e) { addLog("SIGNAL_LOST: Connection failed.", 'ai'); }
+    }
+
+    function addLog(t, s) {
+        const b = document.getElementById('chatBox');
+        const d = document.createElement('div');
+        d.className = s === 'user' ? 'flex justify-end mb-4' : 'flex justify-start mb-4';
+        d.innerHTML = `<div class="${s === 'user' ? 'bg-white text-black font-bold p-3 px-8 rounded-full shadow-lg' : 'opacity-50 italic text-sm'}">${t}</div>`;
+        b.appendChild(d);
+        b.scrollTop = b.scrollHeight;
+    }
+
+    // Optimized Multi-Disciplinary Report Renderer
+    function renderReport(d) {
+        const b = document.getElementById('chatBox');
+        const c = document.createElement('div');
+        c.className = "ai-card space-y-4 mb-6 animate-pulse-once"; 
+        
+        // Handling both IT and General subjects via AI response keys
+        const onsiteHtml = (d.onsite_opportunities && d.onsite_opportunities.length > 0) 
+            ? d.onsite_opportunities.map(o => `<div class="text-white font-medium text-sm">+ ${o.role}</div>`).join('') 
+            : "<div class='opacity-30 text-xs text-red-400 font-bold tracking-widest'>N/A</div>";
+            
+        const remoteHtml = (d.remote_opportunities && d.remote_opportunities.length > 0) 
+            ? d.remote_opportunities.map(o => `<div class="text-white font-medium text-sm">+ ${o.role}</div>`).join('') 
+            : "<div class='opacity-30 text-xs text-red-400 font-bold tracking-widest'>N/A</div>";
+
+        c.innerHTML = `
+            <div class="flex justify-between items-center border-b border-white/10 pb-2">
+                <div class="text-[9px] tracking-[4px] opacity-40 uppercase font-black">Analysis Report</div>
+                <div class="h-2 w-2 rounded-full bg-green-500 shadow-[0_0_10px_green]"></div>
+            </div>
+            
+            <div class="text-sm italic text-gray-300 leading-relaxed py-2">
+                ${d.ai_response || "No summary provided by AI."}
+            </div>
+
+            <div class="grid grid-cols-2 gap-6 pt-2">
+                <div class="bg-white/5 p-3 rounded-lg border border-white/5">
+                    <h4 class="text-[10px] opacity-40 mb-3 font-bold tracking-widest text-blue-300 uppercase">Onsite Career</h4>
+                    <div class="space-y-2">${onsiteHtml}</div>
+                </div>
+                <div class="bg-white/5 p-3 rounded-lg border border-white/5">
+                    <h4 class="text-[10px] opacity-40 mb-3 font-bold tracking-widest text-green-300 uppercase">Remote Path</h4>
+                    <div class="space-y-2">${remoteHtml}</div>
+                </div>
+            </div>`;
+            
+        b.appendChild(c);
+        b.scrollTop = b.scrollHeight;
+    }
+
+    document.getElementById('msgInp').addEventListener('keypress', (e) => { if(e.key === 'Enter') send(); });
+</script>
+</body>
+</html>
